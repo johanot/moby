@@ -124,6 +124,7 @@ func (daemon *Daemon) registerMountPoints(container *container.Container, hostCo
 				Destination: m.Destination,
 				Propagation: m.Propagation,
 				Spec:        m.Spec,
+				CreateFile:  m.CreateFile,
 				CopyData:    false,
 			}
 
@@ -358,10 +359,10 @@ func (daemon *Daemon) backportMountSpec(container *container.Container) {
 			cm.Type = mounttypes.TypeBind
 			cm.Spec.Type = mounttypes.TypeBind
 			cm.Spec.Source = cm.Source
+
+			cm.Spec.BindOptions = &mounttypes.BindOptions{ HostCreateFile: cm.CreateFile }
 			if cm.Propagation != "" {
-				cm.Spec.BindOptions = &mounttypes.BindOptions{
-					Propagation: cm.Propagation,
-				}
+				cm.Spec.BindOptions.Propagation = cm.Propagation
 			}
 		}
 

@@ -176,7 +176,7 @@ func (daemon *Daemon) verifyVolumesInfo(container *container.Container) error {
 				}
 				container.AddMountPointWithVolume(destination, v, true)
 			} else { // Bind mount
-				m := volume.MountPoint{Source: hostPath, Destination: destination, RW: rw}
+				m := volume.MountPoint{Source: hostPath, Destination: destination, RW: rw, CreateFile: true}
 				container.MountPoints[destination] = &m
 			}
 		}

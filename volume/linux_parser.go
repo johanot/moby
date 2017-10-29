@@ -135,6 +135,11 @@ var linuxPropagationModes = map[mount.Propagation]bool{
 	mount.PropagationRShared:  true,
 }
 
+var hostCreateModes = map[string]bool{
+	"dir": true,
+	"file": true,
+}
+
 const linuxDefaultPropagationMode = mount.PropagationRPrivate
 
 func linuxGetPropagation(mode string) mount.Propagation {
@@ -166,6 +171,7 @@ func linuxValidMountMode(mode string) bool {
 	propagationModeCount := 0
 	copyModeCount := 0
 	consistencyModeCount := 0
+	hostCreateModeCount := 0
 
 	for _, o := range strings.Split(mode, ",") {
 		switch {
@@ -179,13 +185,15 @@ func linuxValidMountMode(mode string) bool {
 			copyModeCount++
 		case linuxConsistencyModes[mount.Consistency(o)]:
 			consistencyModeCount++
+		case hostCreateModes[o]:
+			hostCreateModeCount++
 		default:
 			return false
 		}
 	}
 
 	// Only one string for each mode is allowed.
-	if rwModeCount > 1 || labelModeCount > 1 || propagationModeCount > 1 || copyModeCount > 1 || consistencyModeCount > 1 {
+	if rwModeCount > 1 || labelModeCount > 1 || propagationModeCount > 1 || copyModeCount > 1 || consistencyModeCount > 1 || hostCreateModeCount > 1 {
 		return false
 	}
 	return true
@@ -202,6 +210,15 @@ func (p *linuxParser) ReadWrite(mode string) bool {
 		}
 	}
 	return true
+}
+
+func (p *linuxParser) HostCreateFile(mode string) bool {
+	for _, o := range strings.Split(mode, ",") {
+		if o == "file" {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *linuxParser) ParseMountRaw(raw, volumeDriver string) (*MountPoint, error) {
@@ -259,10 +276,11 @@ func (p *linuxParser) ParseMountRaw(raw, volumeDriver string) (*MountPoint, erro
 		}
 		spec.VolumeOptions.NoCopy = !copyData
 	}
-	if linuxHasPropagation(mode) {
+
+	if spec.Type == mount.TypeBind {
 		spec.BindOptions = &mount.BindOptions{
 			Propagation: linuxGetPropagation(mode),
-		}
+			HostCreateFile: p.HostCreateFile(mode) }
 	}
 
 	mp, err := p.parseMountSpec(spec, false)
@@ -307,12 +325,16 @@ func (p *linuxParser) parseMountSpec(cfg mount.Mount, validateBindSourceExists b
 		}
 	case mount.TypeBind:
 		mp.Source = path.Clean(filepath.ToSlash(cfg.Source))
-		if cfg.BindOptions != nil && len(cfg.BindOptions.Propagation) > 0 {
-			mp.Propagation = cfg.BindOptions.Propagation
-		} else {
-			// If user did not specify a propagation mode, get
-			// default propagation mode.
-			mp.Propagation = linuxDefaultPropagationMode
+
+		if cfg.BindOptions != nil {
+			if len(cfg.BindOptions.Propagation) > 0 {
+				mp.Propagation = cfg.BindOptions.Propagation
+			} else {
+				// If user did not specify a propagation mode, get
+				// default propagation mode.
+				mp.Propagation = linuxDefaultPropagationMode
+			}
+			mp.CreateFile = cfg.BindOptions.HostCreateFile
 		}
 	case mount.TypeTmpfs:
 		// NOP

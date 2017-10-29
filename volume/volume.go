@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
+	"github.com/docker/docker/pkg/fileutils"
 )
 
 // DefaultDriverName is the driver name used for the driver
@@ -116,6 +117,11 @@ type MountPoint struct {
 	// Use a pointer here so we can tell if the user set this value explicitly
 	// This allows us to error out when the user explicitly enabled copy but we can't copy due to the volume being populated
 	CopyData bool `json:"-"`
+
+	// Specifies whether a file should be created in the volume source does not exist
+	// true will create a file, false will create a directory (this is the default behavior)
+	CreateFile bool `json:"-"`
+
 	// ID is the opaque ID used to pass to the volume driver.
 	// This should be set by calls to `Mount` and unset by calls to `Unmount`
 	ID string `json:",omitempty"`
@@ -202,9 +208,13 @@ func (m *MountPoint) Setup(mountLabel string, rootIDs idtools.IDPair, checkFun f
 				return "", err
 			}
 		}
+
+		if m.CreateFile {
+			fileutils.CreateIfNotExists(m.Source, false)
+			//TODO: chown of file and non-existing directories
 		// idtools.MkdirAllNewAs() produces an error if m.Source exists and is a file (not a directory)
 		// also, makes sure that if the directory is created, the correct remapped rootUID/rootGID will own it
-		if err := idtools.MkdirAllAndChownNew(m.Source, 0755, rootIDs); err != nil {
+		} else if err := idtools.MkdirAllAndChownNew(m.Source, 0755, rootIDs); err != nil {
 			if perr, ok := err.(*os.PathError); ok {
 				if perr.Err != syscall.ENOTDIR {
 					return "", errors.Wrapf(err, "error while creating mount source path '%s'", m.Source)
